@@ -54,8 +54,18 @@ pub fn create_token_account(
     owner_pubkey: &Pubkey,
     payer: &Keypair,
 ) -> Result<Keypair> {
+    create_token_account_with_delegate(client, mint_pubkey, owner_pubkey, None, payer)
+}
+
+pub fn create_token_account_with_delegate(
+    client: &RpcClient,
+    mint_pubkey: &Pubkey,
+    owner_pubkey: &Pubkey,
+    delegate: Option<(&Pubkey, u64, &Keypair)>,
+    payer: &Keypair,
+) -> Result<Keypair> {
     let spl_account = Keypair::generate(&mut OsRng);
-    let signers = vec![payer, &spl_account];
+    let mut signers = vec![payer, &spl_account];
 
     let lamports = client.get_minimum_balance_for_rent_exemption(spl_token::state::Account::LEN)?;
 
@@ -74,7 +84,19 @@ pub fn create_token_account(
         &owner_pubkey,
     )?;
 
-    let instructions = vec![create_account_instr, init_account_instr];
+    let mut instructions = vec![create_account_instr, init_account_instr];
+
+    if let Some((delegate, amount, owner)) = delegate {
+        instructions.push(token_instruction::approve(
+            &spl_token::ID,
+            &spl_account.pubkey(),
+            delegate,
+            &owner.pubkey(),
+            &[],
+            amount,
+        )?);
+        signers.push(owner);
+    }
 
     let (recent_hash, _fee_calc) = client.get_recent_blockhash()?;
 
@@ -86,6 +108,17 @@ pub fn create_token_account(
     );
     send_txn(client, &txn, false)?;
     Ok(spl_account)
+}
+
+pub fn new_mint(
+    client: &RpcClient,
+    payer_keypair: &Keypair,
+    owner_pubkey: &Pubkey,
+    decimals: u8,
+) -> Result<(Keypair, Signature)> {
+    let mint = Keypair::generate(&mut OsRng);
+    let s = create_and_init_mint(client, payer_keypair, &mint, owner_pubkey, decimals)?;
+    Ok((mint, s))
 }
 
 pub fn create_and_init_mint(
@@ -175,6 +208,29 @@ pub fn mint_to_new_account(
 
     send_txn(client, &txn, false)?;
     Ok(recip_keypair)
+}
+
+pub fn transfer(
+    client: &RpcClient,
+    from: &Pubkey,
+    to: &Pubkey,
+    amount: u64,
+    from_authority: &Keypair,
+    payer: &Keypair,
+) -> Result<Signature> {
+    let instr = token_instruction::transfer(
+        &spl_token::ID,
+        from,
+        to,
+        &from_authority.pubkey(),
+        &[],
+        amount,
+    )?;
+    let (recent_hash, _fee_calc) = client.get_recent_blockhash()?;
+    let signers = [payer, from_authority];
+    let txn =
+        Transaction::new_signed_with_payer(&[instr], Some(&payer.pubkey()), &signers, recent_hash);
+    send_txn(client, &txn, false)
 }
 
 pub fn send_txn(client: &RpcClient, txn: &Transaction, _simulate: bool) -> Result<Signature> {

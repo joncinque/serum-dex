@@ -1,4 +1,3 @@
-use num_enum::IntoPrimitive;
 use solana_client_gen::solana_sdk::program_error::ProgramError;
 use thiserror::Error;
 
@@ -10,12 +9,48 @@ pub enum RegistryError {
     ErrorCode(#[from] RegistryErrorCode),
 }
 
-#[derive(Debug, IntoPrimitive, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 #[repr(u32)]
 pub enum RegistryErrorCode {
     WrongSerialization = 1,
     NotReadySeeNextMajorVersion = 2,
     MustBeDelegated = 3,
+    InvalidClockSysvar = 4,
+    InvalidAccountOwner = 5,
+    NotInitialized = 6,
+    Unauthorized = 7,
+    StaleStakeNeedsWithdrawal = 8,
+    InvalidOwner = 9,
+    EntityRegistrarMismatch = 10,
+    MemberEntityMismatch = 11,
+    EntityNotActivated = 12,
+    RegistrarVaultMismatch = 13,
+    MemberDelegateMismatch = 14,
+    MemberBeneficiaryMismatch = 15,
+    InvalidRentSysvar = 16,
+    NotRentExempt = 17,
+    AlreadyInitialized = 18,
+    InvalidVaultAuthority = 19,
+    InvalidVaultNonce = 20,
+    DelegateInUse = 21,
+    InvalidCapabilityId = 22,
+    InsufficientStakeIntentBalance = 23,
+    InvalidMemberDelegateOwner = 24,
+    InvalidTokenAuthority = 25,
+    EntityLeaderMismatch = 26,
+    EntityMemberMismatch = 27,
+    CheckedFailure = 28,
+    AlreadyBurned = 29,
+    WithdrawalTimelockNotPassed = 30,
+    InvalidAssetsLen = 31,
+    DelegateAccountsNotProvided = 32,
+    PoolMismatch = 33,
+    MegaPoolMismatch = 34,
+    PoolProgramIdMismatch = 35,
+    SharedMemoryMismatch = 36,
+    InsufficientBalance = 37,
+    InvalidVault = 38,
+    InvalidPoolAccounts = 39,
     Unknown = 1000,
 }
 
@@ -31,7 +66,7 @@ impl std::convert::From<RegistryError> for ProgramError {
     fn from(e: RegistryError) -> ProgramError {
         match e {
             RegistryError::ProgramError(e) => e,
-            RegistryError::ErrorCode(c) => ProgramError::Custom(c.into()),
+            RegistryError::ErrorCode(c) => ProgramError::Custom(c as u32),
         }
     }
 }

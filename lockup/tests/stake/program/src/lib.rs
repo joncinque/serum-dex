@@ -7,10 +7,10 @@
 use serum_common::pack::*;
 use serum_lockup_test_stake::accounts;
 use serum_lockup_test_stake::instruction::StakeInstruction;
+#[cfg(feature = "program")]
+use solana_program::info;
 use solana_sdk::account_info::{next_account_info, AccountInfo};
 use solana_sdk::entrypoint::ProgramResult;
-#[cfg(feature = "program")]
-use solana_sdk::info;
 use solana_sdk::pubkey::Pubkey;
 
 #[cfg(feature = "program")]
@@ -60,11 +60,14 @@ mod handlers {
         info!("handler: stake");
         let acc_infos = &mut accounts.iter();
 
-        let token_acc_info = next_account_info(acc_infos)?;
-        let vault_acc_info = next_account_info(acc_infos)?;
-        let vault_authority_acc_info = next_account_info(acc_infos)?;
+        // Whitelist withdrawal interface.
+        let depositor_acc_info = next_account_info(acc_infos)?;
+        let depositor_authority_acc_info = next_account_info(acc_infos)?;
         let token_program_acc_info = next_account_info(acc_infos)?;
+
+        // Program specific.
         let wl_acc_info = next_account_info(acc_infos)?;
+        let vault_acc_info = next_account_info(acc_infos)?;
 
         let wl = accounts::Instance::unpack(&wl_acc_info.try_borrow_data()?)?;
         let nonce = wl.nonce;
@@ -73,9 +76,9 @@ mod handlers {
         // Delegate transfer to oneself.
         let transfer_instruction = spl_token::instruction::transfer(
             &spl_token::ID,
-            token_acc_info.key,
+            depositor_acc_info.key,
             vault_acc_info.key,
-            &vault_authority_acc_info.key,
+            &depositor_authority_acc_info.key,
             &[],
             amount,
         )?;
@@ -83,8 +86,8 @@ mod handlers {
             &transfer_instruction,
             &[
                 vault_acc_info.clone(),
-                token_acc_info.clone(),
-                vault_authority_acc_info.clone(),
+                depositor_acc_info.clone(),
+                depositor_authority_acc_info.clone(),
                 token_program_acc_info.clone(),
             ],
             &[&signer_seeds],
@@ -95,11 +98,14 @@ mod handlers {
         info!("handler: unstake");
         let acc_infos = &mut accounts.iter();
 
-        let token_acc_info = next_account_info(acc_infos)?;
-        let vault_acc_info = next_account_info(acc_infos)?;
-        let vault_authority_acc_info = next_account_info(acc_infos)?;
+        // Whitelist withdrawal interface.
+        let depositor_acc_info = next_account_info(acc_infos)?;
+        let depositor_authority_acc_info = next_account_info(acc_infos)?;
         let token_program_acc_info = next_account_info(acc_infos)?;
+        let vault_authority_acc_info = next_account_info(acc_infos)?;
+        // Program specific.
         let wl_acc_info = next_account_info(acc_infos)?;
+        let vault_acc_info = next_account_info(acc_infos)?;
 
         let wl = accounts::Instance::unpack(&wl_acc_info.try_borrow_data()?)?;
         let nonce = wl.nonce;
@@ -108,7 +114,7 @@ mod handlers {
         let transfer_instruction = spl_token::instruction::transfer(
             &spl_token::ID,
             vault_acc_info.key,
-            token_acc_info.key,
+            depositor_acc_info.key,
             &vault_authority_acc_info.key,
             &[],
             amount,
@@ -117,7 +123,7 @@ mod handlers {
             &transfer_instruction,
             &[
                 vault_acc_info.clone(),
-                token_acc_info.clone(),
+                depositor_acc_info.clone(),
                 vault_authority_acc_info.clone(),
                 token_program_acc_info.clone(),
             ],

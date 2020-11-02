@@ -5,9 +5,9 @@
 use serum_common::pack::Pack;
 use serum_lockup::error::{LockupError, LockupErrorCode};
 use serum_lockup::instruction::LockupInstruction;
+use solana_program::info;
 use solana_sdk::account_info::AccountInfo;
 use solana_sdk::entrypoint::ProgramResult;
-use solana_sdk::info;
 use solana_sdk::pubkey::Pubkey;
 
 pub(crate) mod access_control;
@@ -23,13 +23,7 @@ mod whitelist_deposit;
 mod whitelist_withdraw;
 
 solana_sdk::entrypoint!(entry);
-fn entry<'a>(
-    program_id: &'a Pubkey,
-    accounts: &'a [AccountInfo<'a>],
-    instruction_data: &[u8],
-) -> ProgramResult {
-    info!("process-instruction");
-
+fn entry(program_id: &Pubkey, accounts: &[AccountInfo], instruction_data: &[u8]) -> ProgramResult {
     let instruction: LockupInstruction = LockupInstruction::unpack(instruction_data)
         .map_err(|_| LockupError::ErrorCode(LockupErrorCode::WrongSerialization))?;
 
@@ -39,14 +33,14 @@ fn entry<'a>(
         }
         LockupInstruction::CreateVesting {
             beneficiary,
-            end_slot,
+            end_ts,
             period_count,
             deposit_amount,
         } => create_vesting::handler(
             program_id,
             accounts,
             beneficiary,
-            end_slot,
+            end_ts,
             period_count,
             deposit_amount,
         ),
@@ -72,8 +66,6 @@ fn entry<'a>(
     };
 
     result?;
-
-    info!("process-instruction success");
 
     Ok(())
 }

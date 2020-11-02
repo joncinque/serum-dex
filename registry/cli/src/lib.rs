@@ -4,7 +4,7 @@ use serum_common::client::rpc;
 use serum_node_context::Context;
 use serum_node_logging::info;
 use serum_registry::accounts::{Entity, Member, Registrar};
-use serum_registry::client_ext::client::Client;
+use serum_registry_client::*;
 use solana_client_gen::prelude::*;
 
 #[derive(Debug, Clap)]
@@ -41,6 +41,9 @@ pub enum SubCommand {
         /// Flag for specifiying the crank capability. Required.
         #[clap(short, long)]
         crank: bool,
+        /// Registrar account address.
+        #[clap(short, long)]
+        registrar: Pubkey,
     },
     /// Joins an entity, creating an associated member account.
     JoinEntity {
@@ -53,6 +56,9 @@ pub enum SubCommand {
         /// Delegate of the member account [optional].
         #[clap(short, long)]
         delegate: Option<Pubkey>,
+        /// Registrar account address.
+        #[clap(short, long)]
+        registrar: Pubkey,
     },
 }
 
@@ -97,7 +103,17 @@ pub enum GovCommand {
         authority_file: Option<String>,
         /// The amount of slots one must wait for a staking withdrawal.
         #[clap(short, long, default_value = "10000")]
-        withdrawal_timelock: u64,
+        withdrawal_timelock: i64,
+        /// Slots in addition to the withdrawal_timelock for deactivation.
+        #[clap(short = 't', long, default_value = "10000")]
+        deactivation_timelock_premium: i64,
+        /// SRM equivalent amount required for node activation.
+        #[clap(short, long, default_value = "10_000_000")]
+        reward_activation_threshold: u64,
+        #[clap(short, long)]
+        pool_program_id: Pubkey,
+        #[clap(short = 'd', long)]
+        pool_token_decimals: u8,
     },
     /// Registers a new node capability in the registrar.
     RegisterCapability {
@@ -106,7 +122,7 @@ pub enum GovCommand {
         force_id: Option<u8>,
         /// Capability fee rate in basis points.
         #[clap(long)]
-        fee_bps: u32,
+        fee: u32,
         /// Adress of an initialized on-chain registrar
         #[clap(long)]
         registrar: Pubkey,
@@ -123,20 +139,24 @@ pub fn run(opts: Opts) -> Result<()> {
     match opts.cmd.sub_cmd {
         SubCommand::Accounts(cmd) => account_cmd(ctx, registry_pid, cmd),
         SubCommand::Gov(cmd) => gov_cmd(ctx, registry_pid, cmd),
-        SubCommand::CreateEntity { crank, leader } => {
-            create_entity_cmd(ctx, registry_pid, leader, crank)
-        }
+        SubCommand::CreateEntity {
+            crank,
+            leader,
+            registrar,
+        } => create_entity_cmd(ctx, registry_pid, registrar, leader, crank),
         SubCommand::JoinEntity {
             entity,
             beneficiary,
             delegate,
-        } => join_entity_cmd(ctx, registry_pid, entity, beneficiary, delegate),
+            registrar,
+        } => join_entity_cmd(ctx, registry_pid, registrar, entity, beneficiary, delegate),
     }
 }
 
 fn join_entity_cmd(
     ctx: &Context,
     registry_pid: Option<Pubkey>,
+    registrar: Pubkey,
     entity: Pubkey,
     beneficiary: Pubkey,
     delegate: Option<Pubkey>,
@@ -146,11 +166,24 @@ fn join_entity_cmd(
 
     let client = ctx.connect::<Client>(registry_pid)?;
 
-    let (tx_sig, stake_addr) = client.join_entity_derived(entity, beneficiary, delegate)?;
+    let watchtower = Pubkey::new_from_array([0; 32]);
+    let watchtower_dest = Pubkey::new_from_array([0; 32]);
+
+    let JoinEntityResponse { tx, member } = client.join_entity(JoinEntityRequest {
+        entity,
+        beneficiary,
+        delegate,
+        watchtower,
+        watchtower_dest,
+        registrar,
+    })?;
 
     let logger = serum_node_logging::get_logger("node/registry");
-    info!(logger, "Confirmed transaction: {:?}", tx_sig);
-    info!(logger, "Created stake with address: {:?}", stake_addr);
+    info!(logger, "Confirmed transaction: {:?}", tx);
+    info!(
+        logger,
+        "Created node entity member with address: {:?}", member
+    );
 
     Ok(())
 }
@@ -158,6 +191,7 @@ fn join_entity_cmd(
 fn create_entity_cmd(
     ctx: &Context,
     registry_pid: Option<Pubkey>,
+    registrar: Pubkey,
     leader_filepath: String,
     crank: bool,
 ) -> Result<()> {
@@ -173,15 +207,16 @@ fn create_entity_cmd(
         .map_err(|_| anyhow!("Unable to read leader keypair file"))?;
 
     let client = ctx.connect::<Client>(registry_pid)?;
-    let (tx_sig, entity_address) = client.create_entity_derived(
-        &leader_kp,
+    let CreateEntityResponse { tx, entity } = client.create_entity(CreateEntityRequest {
+        node_leader: &leader_kp,
         capabilities,
-        serum_registry::accounts::StakeKind::Delegated,
-    )?;
+        registrar,
+        stake_kind: serum_registry::accounts::StakeKind::Delegated,
+    })?;
 
     let logger = serum_node_logging::get_logger("node/registry");
-    info!(logger, "Confirmed transaction: {:?}", tx_sig);
-    info!(logger, "Created entity with address: {:?}", entity_address);
+    info!(logger, "Confirmed transaction: {:?}", tx);
+    info!(logger, "Created entity with address: {:?}", entity);
 
     Ok(())
 }
@@ -193,25 +228,33 @@ pub fn gov_cmd(ctx: &Context, registry_pid: Option<Pubkey>, gov_cmd: GovCommand)
             authority,
             authority_file,
             withdrawal_timelock,
+            deactivation_timelock_premium,
+            reward_activation_threshold,
+            pool_program_id,
+            pool_token_decimals,
         } => gov::init(
             ctx,
             registry_pid,
             authority,
             authority_file,
             withdrawal_timelock,
+            deactivation_timelock_premium,
+            reward_activation_threshold,
+            pool_program_id,
+            pool_token_decimals,
         ),
         GovCommand::RegisterCapability {
             force_id,
             registrar,
             registrar_authority_file,
-            fee_bps,
+            fee,
         } => gov::register_capability(
             ctx,
             registry_pid,
             registrar,
             registrar_authority_file,
             force_id,
-            fee_bps,
+            fee,
         ),
     }
 }
@@ -270,13 +313,17 @@ mod gov {
         registry_pid: Pubkey,
         authority: Option<Pubkey>,
         authority_file: Option<String>,
-        withdrawal_timelock: u64,
+        withdrawal_timelock: i64,
+        deactivation_timelock_premium: i64,
+        reward_activation_threshold: u64,
+        pool_program_id: Pubkey,
+        pool_token_decimals: u8,
     ) -> Result<()> {
         let logger = serum_node_logging::get_logger("node/registry");
 
         let client = ctx.connect::<Client>(registry_pid)?;
 
-        let authority = match authority {
+        let registrar_authority = match authority {
             Some(a) => a,
             None => {
                 let file = authority_file.expect("Must be provided if authority is none");
@@ -285,18 +332,24 @@ mod gov {
                 kp.pubkey()
             }
         };
-        let accounts = [AccountMeta::new_readonly(
-            solana_sdk::sysvar::rent::ID,
-            false,
-        )];
-        let (_tx_sig, registrar_kp) =
-            client.create_account_and_initialize(&accounts, authority, withdrawal_timelock)?;
+        let InitializeResponse {
+            registrar, pool, ..
+        } = client.initialize(InitializeRequest {
+            registrar_authority,
+            withdrawal_timelock,
+            deactivation_timelock_premium,
+            mint: ctx.srm_mint,
+            mega_mint: ctx.msrm_mint,
+            reward_activation_threshold,
+            pool_program_id,
+            pool_token_decimals,
+        })?;
 
         info!(
             logger,
-            "Registrar initialized with address: {:?}",
-            registrar_kp.pubkey()
+            "Registrar initialized with address: {:?}", registrar,
         );
+        info!(logger, "Pool initialized with address: {:?}", pool,);
 
         Ok(())
     }
@@ -307,7 +360,7 @@ mod gov {
         registrar: Pubkey,
         registrar_authority_file: String,
         force_id: Option<u8>,
-        fee_bps: u32,
+        capability_fee: u32,
     ) -> Result<()> {
         let logger = serum_node_logging::get_logger("node/registry");
         let client = ctx.connect::<Client>(registry_pid)?;
@@ -325,18 +378,16 @@ mod gov {
         let registrar_authority =
             solana_sdk::signature::read_keypair_file(&registrar_authority_file)
                 .map_err(|_| anyhow!("Unable to read provided authority file"))?;
-        let accounts = [
-            AccountMeta::new_readonly(registrar_authority.pubkey(), true),
-            AccountMeta::new(registrar, false),
-        ];
-        let signers = [&registrar_authority, client.payer()];
-
-        let tx_sig =
-            client.register_capability_with_signers(&signers, &accounts, capability_id, fee_bps)?;
+        let resp = client.register_capability(RegisterCapabilityRequest {
+            registrar,
+            registrar_authority: &registrar_authority,
+            capability_id,
+            capability_fee,
+        })?;
 
         info!(
             logger,
-            "Registered capability with transaction signature: {:?}", tx_sig
+            "Registered capability with transaction signature: {:?}", resp.tx,
         );
 
         Ok(())

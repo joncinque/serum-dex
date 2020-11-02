@@ -9,6 +9,10 @@ members = [
     "pool/schema",
     "registry",
     "registry/cli",
+    "registry/client",
+    "rewards",
+    "rewards/cli",
+    "rewards/client",
     "lockup",
     "lockup/cli",
     "lockup/client",
@@ -20,10 +24,14 @@ members = [
     "node/context",
     "node/dev",
     "lockup/tests/stake",
+    "stake",
 ]
 exclude = [
     "dex",
+    "retbuf",
     "registry/program",
+    "rewards/program",
     "lockup/program",
     "lockup/tests/stake/program",
+    "stake/program",
 ]

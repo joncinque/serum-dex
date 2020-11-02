@@ -1,8 +1,5 @@
 //! Module for safe access to accounts.
 
-// TODO: it'd be great to replace or merge this with the DEX's macro doing this
-//       type of thing.
-
 use serum_common::pack::Pack;
 use serum_lockup::accounts::{Safe, TokenVault, Vesting, Whitelist};
 use serum_lockup::error::{LockupError, LockupErrorCode};
@@ -33,6 +30,7 @@ pub fn governance(
 
 pub fn whitelist<'a>(
     wl_acc_info: AccountInfo<'a>,
+    safe_acc_info: &AccountInfo<'a>,
     safe: &Safe,
     program_id: &Pubkey,
 ) -> Result<Whitelist<'a>, LockupError> {
@@ -43,7 +41,12 @@ pub fn whitelist<'a>(
     if safe.whitelist != *wl_acc_info.key {
         return Err(LockupErrorCode::InvalidWhitelist)?;
     }
-    Whitelist::new(wl_acc_info).map_err(Into::into)
+    let wl = Whitelist::new(wl_acc_info)?;
+    if wl.safe()? != *safe_acc_info.key {
+        return Err(LockupErrorCode::WhitelistSafeMismatch)?;
+    }
+
+    Ok(wl)
 }
 
 /// Access control on any instruction mutating an existing Vesting account.
@@ -113,16 +116,24 @@ pub fn safe(acc_info: &AccountInfo, program_id: &Pubkey) -> Result<Safe, LockupE
 
 pub fn vault(
     acc_info: &AccountInfo,
+    safe: &Safe,
+    program_id: &Pubkey,
+) -> Result<TokenAccount, LockupError> {
+    let vault = token(acc_info)?;
+    if *acc_info.key != safe.vault {
+        return Err(LockupErrorCode::InvalidVault)?;
+    }
+    Ok(vault)
+}
+
+pub fn vault_join(
+    acc_info: &AccountInfo,
     vault_authority_acc_info: &AccountInfo,
     safe_acc_info: &AccountInfo,
     program_id: &Pubkey,
 ) -> Result<TokenAccount, LockupError> {
     let safe = safe(safe_acc_info, program_id)?;
-    let vault = token(acc_info)?;
-    if *acc_info.key != safe.vault {
-        return Err(LockupErrorCode::InvalidVault)?;
-    }
-
+    let vault = vault(acc_info, &safe, program_id)?;
     let va = vault_authority(
         vault_authority_acc_info,
         safe_acc_info.key,
