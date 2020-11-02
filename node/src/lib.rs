@@ -84,10 +84,6 @@ fn run_cmd(ctx: &Context, cmd: Command) -> Result<()> {
         Command::Registry(reg_cmd) => serum_node_registry::run_cmd(ctx, reg_cmd),
         Command::Dev(dev_cmd) => serum_node_dev::run_cmd(ctx, dev_cmd),
         Command::Lockup(l_cmd) => serum_node_lockup::run_cmd(ctx, l_cmd),
-        Command::Rewards(cmd) => serum_rewards_cli::run(serum_rewards_cli::Opts {
-            ctx: ctx.clone(),
-            cmd,
-        }),
     }
 }
 
@@ -121,8 +117,6 @@ pub enum Command {
     Dev(serum_node_dev::Command),
     /// Serum lockup program.
     Lockup(serum_node_lockup::Command),
-    /// Serum rewards program.
-    Rewards(serum_rewards_cli::Command),
 }
 
 pub struct Handle {

@@ -3021,7 +3021,6 @@ dependencies = [
  "serum-node-lockup",
  "serum-node-logging",
  "serum-node-registry",
- "serum-rewards-cli",
  "tokio 0.2.22",
 ]
 
@@ -3228,52 +3227,6 @@ dependencies = [
  "solana-client",
  "solana-client-gen",
  "spl-shared-memory",
- "spl-token",
- "thiserror",
-]
-
-[[package]]
-name = "serum-rewards"
-version = "0.1.0"
-dependencies = [
- "arrayref",
- "borsh",
- "bytemuck",
- "crank",
- "lazy_static",
- "num_enum",
- "rand 0.7.3",
- "serum-common",
- "serum-common-tests",
- "serum-registry",
- "serum-registry-client",
- "serum-rewards-client",
- "serum_dex",
- "solana-client-gen",
- "spl-token",
- "thiserror",
-]
-
-[[package]]
-name = "serum-rewards-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap 3.0.0-beta.2",
- "serum-node-context",
- "serum-rewards-client",
- "solana-client-gen",
-]
-
-[[package]]
-name = "serum-rewards-client"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "serum-common",
- "serum-rewards",
- "solana-client",
- "solana-client-gen",
  "spl-token",
  "thiserror",
 ]
