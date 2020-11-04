@@ -165,12 +165,12 @@ pub struct AnyNode {
 unsafe impl Zeroable for AnyNode {}
 unsafe impl Pod for AnyNode {}
 
-pub enum NodeRef<'a> {
+enum NodeRef<'a> {
     Inner(&'a InnerNode),
     Leaf(&'a LeafNode),
 }
 
-pub enum NodeRefMut<'a> {
+enum NodeRefMut<'a> {
     Inner(&'a mut InnerNode),
     Leaf(&'a mut LeafNode),
 }
@@ -218,6 +218,14 @@ impl AnyNode {
     pub fn as_leaf_mut(&mut self) -> Option<&mut LeafNode> {
         match self.case_mut() {
             Some(NodeRefMut::Leaf(leaf_ref)) => Some(leaf_ref),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub fn as_leaf(&self) -> Option<&LeafNode> {
+        match self.case() {
+            Some(NodeRef::Leaf(leaf_ref)) => Some(leaf_ref),
             _ => None,
         }
     }
